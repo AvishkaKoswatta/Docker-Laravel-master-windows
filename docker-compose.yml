@@ -1,13 +1,12 @@
 version: '3.8'
 
 services:
-
   # Web Server Service
   nginx:
     image: nginx:alpine
     container_name: nginx
     ports:
-      - "8080:80"
+      - "8085:80"
     volumes:
       - ./src:/var/www
       - ./nginx/conf.d/:/etc/nginx/conf.d/
@@ -15,32 +14,21 @@ services:
       - app
       - db
 
-  #Database Service
-  # db:
-  #   image : mysql
-  #   container_name : mysql
-  #   volumes:
-  #     - ./mysql/data:/var/lib/mysql
-  #   ports:
-  #     - "3306:3306"
-  #   environment:
-  #     MYSQL_DATABASE: blog
-  #     MYSQL_ROOT_PASSWORD: password
+  # Database Service
   db:
-    image: postgres
-    container_name: postgres
+    image: mysql:5.7  # Use specific version known to be compatible
+    container_name: mysql
     volumes:
-      - ./postgresql/data:/var/lib/postgresql/data
+      - ./mysql/data:/var/lib/mysql
     ports:
-      - "5432:5432"
-    environment: 
-      POSTGRES_DB: blog
-      POSTGRES_USER: root 
-      POSTGRES_PASSWORD: password 
+      - "3307:3306"
+    environment:
+      MYSQL_DATABASE: devops-windows
+      MYSQL_ROOT_PASSWORD: root_password_here
 
   # Application Service
   app:
-    container_name: blog
+    container_name: laravel-app
     build: 
       context: ./php
       dockerfile: Dockerfile
@@ -49,22 +37,19 @@ services:
     ports:
       - "9000:9000"
     working_dir: /var/www
-
-  #phpMyAdmin Service
-  # phpmyadmin:
-  #   image: phpmyadmin/phpmyadmin
-  #   container_name: phpmyadmin
-  #   ports:
-  #     - "3400:80"
-  #   depends_on:
-  #     - db
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: pgAdmin
-    ports:
-      - "5050:80"
-    depends_on:
-      - db 
     environment:
-      PGADMIN_DEFAULT_EMAIL: hanieasemi76@gmail.com
-      PGADMIN_DEFAULT_PASSWORD: password 
+      - DB_CONNECTION=mysql
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_DATABASE=devops-windows
+      - DB_USERNAME=root
+      - DB_PASSWORD=root_password_here
+
+  # phpMyAdmin Service
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: phpmyadmin
+    ports:
+      - "3400:80"
+    depends_on:
+      - db
