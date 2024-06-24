@@ -1,18 +1,5 @@
 pipeline {
     agent any
-
-    environment {
-        // Load environment variables from the .env file
-        MYSQL_DATABASE = 'devops-windows'
-        MYSQL_ROOT_PASSWORD = 'root_password_here'
-        DB_CONNECTION = 'mysql'
-        DB_HOST = 'db'
-        DB_PORT = '3306'
-        DB_DATABASE = 'devops-windows'
-        DB_USERNAME = 'root'
-        DB_PASSWORD = 'root_password_here'
-    }
-
     stages {
         stage('Checkout') {
             steps {
@@ -20,50 +7,85 @@ pipeline {
                 checkout scm
             }
         }
-        
         stage('Build') {
             steps {
                 echo 'Building the application...'
-                sh 'docker-compose build'
+                script {
+                    try {
+                        if (isUnix()) {
+                            sh 'chmod +x ./build_script.sh && ./build_script.sh'
+                        } else {
+                            bat 'build_script.bat'
+                        }
+                    } catch (Exception e) {
+                        echo 'Build failed'
+                        currentBuild.result = 'FAILURE'
+                        throw e
+                    }
+                }
             }
         }
-        
         stage('Start Services') {
+            when {
+                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
+            }
             steps {
                 echo 'Starting services...'
-                sh 'docker-compose up -d'
+                script {
+                    if (isUnix()) {
+                        sh 'nohup ./start_services.sh &'
+                    } else {
+                        bat 'start_services.bat'
+                    }
+                }
             }
         }
-        
         stage('Run Tests') {
+            when {
+                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
+            }
             steps {
                 echo 'Running tests...'
-                sh 'docker-compose exec app vendor/bin/phpunit'
+                script {
+                    if (isUnix()) {
+                        sh './run_tests.sh'
+                    } else {
+                        bat 'run_tests.bat'
+                    }
+                }
             }
         }
-        
         stage('Deploy') {
+            when {
+                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
+            }
             steps {
                 echo 'Deploying the application...'
-                // Add your deployment steps here
-                // For example, you might use scp or rsync to transfer files
-                sh 'scp -r ./src user@server:/path/to/deploy'
+                script {
+                    if (isUnix()) {
+                        sh './deploy.sh'
+                    } else {
+                        bat 'deploy.bat'
+                    }
+                }
             }
         }
     }
-    
     post {
-        success {
-            echo 'Pipeline completed successfully!'
-        }
-        failure {
-            echo 'Pipeline failed!'
-        }
         always {
             echo 'Stopping services...'
-            sh 'docker-compose down'
-            echo 'Cleaning up...'
-            cleanWs()
+            script {
+                try {
+                    if (isUnix()) {
+                        sh './stop_services.sh'
+                    } else {
+                        bat 'stop_services.bat'
+                    }
+                } catch (Exception e) {
+                    echo 'Error stopping services: ' + e.getMessage()
+                }
+            }
+            echo 'Pipeline finished'
         }
     }
 }
