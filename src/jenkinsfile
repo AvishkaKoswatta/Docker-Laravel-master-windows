@@ -1,91 +1,61 @@
 pipeline {
     agent any
+
+    environment {
+        DB_ROOT_PASSWORD = 'root_password_here'
+        DB_DATABASE = 'devops-windows'
+        DB_USERNAME = 'root'
+        DB_PASSWORD = 'root_password_here'
+    }
+
     stages {
         stage('Checkout') {
             steps {
-                echo 'Checking out the source code...'
-                checkout scm
+                git 'https://github.com/AvishkaKoswatta/Docker-Laravel-master-windows.git' // Replace with your repository URL
             }
         }
-        stage('Build') {
+        
+        stage('Build Docker Images') {
             steps {
-                echo 'Building the application...'
                 script {
-                    try {
-                        if (isUnix()) {
-                            sh 'chmod +x ./build_script.sh && ./build_script.sh'
-                        } else {
-                            bat 'build_script.bat'
-                        }
-                    } catch (Exception e) {
-                        echo 'Build failed'
-                        currentBuild.result = 'FAILURE'
-                        throw e
-                    }
+                    docker.build('nginx', './nginx'')
+                   docker.build('mysql', './mysql')
+                    docker.build('laravel-app', './php')
+                    docker.build('phpmyadmin', './phpmyadmin')
                 }
             }
         }
-        stage('Start Services') {
-            when {
-                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
-            }
+
+        stage('Run Docker Containers') {
             steps {
-                echo 'Starting services...'
                 script {
-                    if (isUnix()) {
-                        sh 'nohup ./start_services.sh &'
-                    } else {
-                        bat 'start_services.bat'
-                    }
+                    docker.compose.up '-d'
                 }
             }
         }
+        
+        stage('Run Migrations') {
+            steps {
+                script {
+                    docker.compose.exec('laravel-app', 'php artisan migrate')
+                }
+            }
+        }
+        
         stage('Run Tests') {
-            when {
-                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
-            }
             steps {
-                echo 'Running tests...'
                 script {
-                    if (isUnix()) {
-                        sh './run_tests.sh'
-                    } else {
-                        bat 'run_tests.bat'
-                    }
+                    docker.compose.exec('laravel-app', 'php artisan test')
                 }
             }
         }
-        stage('Deploy') {
-            when {
-                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
-            }
+
+        stage('Clean Up') {
             steps {
-                echo 'Deploying the application...'
                 script {
-                    if (isUnix()) {
-                        sh './deploy.sh'
-                    } else {
-                        bat 'deploy.bat'
-                    }
+                    docker.compose.down '--volumes'
                 }
             }
-        }
-    }
-    post {
-        always {
-            echo 'Stopping services...'
-            script {
-                try {
-                    if (isUnix()) {
-                        sh './stop_services.sh'
-                    } else {
-                        bat 'stop_services.bat'
-                    }
-                } catch (Exception e) {
-                    echo 'Error stopping services: ' + e.getMessage()
-                }
-            }
-            echo 'Pipeline finished'
         }
     }
 }
